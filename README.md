@@ -25,7 +25,7 @@ Add FirebaseKit-iOS to your project via Swift Package Manager:
 
 ```swift
 // In your Package.swift or Xcode project:
-.package(url: "https://github.com/your-org/FirebaseKit-iOS.git", from: "1.0.0")
+.package(url: "https://github.com/MrPalme/FirebaseKit-iOS.git", from: "1.0.0")
 ```
 
 Then add the modules you need as dependencies:
