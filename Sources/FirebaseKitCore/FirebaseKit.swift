@@ -111,4 +111,52 @@ public enum FirebaseKit {
         }
         return service
     }
+
+    /// The Storage service.
+    ///
+    /// - Important: The `storage` module must be enabled in ``FirebaseKitConfiguration/modules``
+    ///   and ``FirebaseKitStorage`` must be linked in your target.
+    public static var storage: any FirebaseKitStorageServing {
+        guard let service = FirebaseKitContainer.shared.storageService else {
+            fatalError(
+                "[FirebaseKit] Storage service is not available. "
+                + "Ensure the 'storage' module is enabled in FirebaseKitConfiguration "
+                + "and FirebaseKitStorage is linked in your target. "
+                + "Call FirebaseKitStorageService.register() after FirebaseKit.configure()."
+            )
+        }
+        return service
+    }
+
+    /// The Realtime Database service.
+    ///
+    /// - Important: The `realtimeDatabase` module must be enabled in ``FirebaseKitConfiguration/modules``
+    ///   and ``FirebaseKitRealtimeDatabase`` must be linked in your target.
+    public static var realtimeDatabase: any FirebaseKitRealtimeDatabaseServing {
+        guard let service = FirebaseKitContainer.shared.realtimeDatabaseService else {
+            fatalError(
+                "[FirebaseKit] RealtimeDatabase service is not available. "
+                + "Ensure the 'realtimeDatabase' module is enabled in FirebaseKitConfiguration "
+                + "and FirebaseKitRealtimeDatabase is linked in your target. "
+                + "Call FirebaseKitRealtimeDatabaseService.register() after FirebaseKit.configure()."
+            )
+        }
+        return service
+    }
+
+    /// The Analytics service.
+    ///
+    /// - Important: The `analytics` module must be enabled in ``FirebaseKitConfiguration/modules``
+    ///   and ``FirebaseKitAnalytics`` must be linked in your target.
+    public static var analytics: any FirebaseKitAnalyticsServing {
+        guard let service = FirebaseKitContainer.shared.analyticsService else {
+            fatalError(
+                "[FirebaseKit] Analytics service is not available. "
+                + "Ensure the 'analytics' module is enabled in FirebaseKitConfiguration "
+                + "and FirebaseKitAnalytics is linked in your target. "
+                + "Call FirebaseKitAnalyticsService.register() after FirebaseKit.configure()."
+            )
+        }
+        return service
+    }
 }

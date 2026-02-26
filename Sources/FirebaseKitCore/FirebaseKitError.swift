@@ -64,6 +64,48 @@ public enum FirebaseKitError: Error, Sendable {
     /// Encoding a model for Firestore write failed.
     case firestoreEncodingFailed(path: String, underlying: Error)
 
+    // MARK: - Storage
+
+    /// A storage upload failed.
+    case storageUploadFailed(path: String, underlying: Error)
+
+    /// A storage download failed.
+    case storageDownloadFailed(path: String, underlying: Error)
+
+    /// A storage deletion failed.
+    case storageDeleteFailed(path: String, underlying: Error)
+
+    /// A storage operation failed (generic).
+    case storageOperationFailed(underlying: Error)
+
+    /// The storage object was not found.
+    case storageObjectNotFound(path: String)
+
+    /// Permission denied for a storage operation.
+    case storagePermissionDenied(path: String, underlying: Error)
+
+    /// A storage operation was cancelled.
+    case storageCancelled(path: String)
+
+    // MARK: - Realtime Database
+
+    /// A Realtime Database read failed.
+    case realtimeDBReadFailed(path: String, underlying: Error)
+
+    /// A Realtime Database write failed.
+    case realtimeDBWriteFailed(path: String, underlying: Error)
+
+    /// Decoding a Realtime Database value failed.
+    case realtimeDBDecodingFailed(path: String, underlying: Error)
+
+    /// A Realtime Database operation failed (generic).
+    case realtimeDBOperationFailed(underlying: Error)
+
+    // MARK: - Analytics
+
+    /// An analytics operation failed.
+    case analyticsFailure(underlying: Error)
+
     // MARK: - General
 
     /// A module that was not enabled in configuration was accessed.
@@ -110,6 +152,30 @@ extension FirebaseKitError: LocalizedError {
             return "Failed to decode Firestore document at '\(path)'."
         case .firestoreEncodingFailed(let path, _):
             return "Failed to encode model for Firestore document at '\(path)'."
+        case .storageUploadFailed(let path, let underlying):
+            return "Storage upload failed at '\(path)': \(underlying.localizedDescription)"
+        case .storageDownloadFailed(let path, let underlying):
+            return "Storage download failed at '\(path)': \(underlying.localizedDescription)"
+        case .storageDeleteFailed(let path, let underlying):
+            return "Storage delete failed at '\(path)': \(underlying.localizedDescription)"
+        case .storageOperationFailed(let underlying):
+            return "Storage operation failed: \(underlying.localizedDescription)"
+        case .storageObjectNotFound(let path):
+            return "Storage object not found at '\(path)'."
+        case .storagePermissionDenied(let path, _):
+            return "Permission denied for storage operation at '\(path)'."
+        case .storageCancelled(let path):
+            return "Storage operation cancelled at '\(path)'."
+        case .realtimeDBReadFailed(let path, let underlying):
+            return "Realtime Database read failed at '\(path)': \(underlying.localizedDescription)"
+        case .realtimeDBWriteFailed(let path, let underlying):
+            return "Realtime Database write failed at '\(path)': \(underlying.localizedDescription)"
+        case .realtimeDBDecodingFailed(let path, _):
+            return "Failed to decode Realtime Database value at '\(path)'."
+        case .realtimeDBOperationFailed(let underlying):
+            return "Realtime Database operation failed: \(underlying.localizedDescription)"
+        case .analyticsFailure(let underlying):
+            return "Analytics error: \(underlying.localizedDescription)"
         case .moduleNotEnabled(let module):
             return "The '\(module)' module is not enabled. Enable it in FirebaseKitConfiguration."
         case .notConfigured:

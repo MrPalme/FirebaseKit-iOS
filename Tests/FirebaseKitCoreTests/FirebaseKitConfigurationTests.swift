@@ -17,6 +17,9 @@ final class FirebaseKitConfigurationTests: XCTestCase {
         XCTAssertTrue(config.modules.contains(.remoteConfig))
         XCTAssertTrue(config.modules.contains(.messaging))
         XCTAssertTrue(config.modules.contains(.firestore))
+        XCTAssertTrue(config.modules.contains(.storage))
+        XCTAssertTrue(config.modules.contains(.realtimeDatabase))
+        XCTAssertTrue(config.modules.contains(.analytics))
     }
 
     func testCustomModuleSelection() {
@@ -25,6 +28,17 @@ final class FirebaseKitConfigurationTests: XCTestCase {
         XCTAssertTrue(config.modules.contains(.remoteConfig))
         XCTAssertFalse(config.modules.contains(.messaging))
         XCTAssertFalse(config.modules.contains(.firestore))
+        XCTAssertFalse(config.modules.contains(.storage))
+        XCTAssertFalse(config.modules.contains(.realtimeDatabase))
+        XCTAssertFalse(config.modules.contains(.analytics))
+    }
+
+    func testNewModulesCanBeSelectedIndividually() {
+        let config = FirebaseKitConfiguration(modules: [.storage, .analytics])
+        XCTAssertTrue(config.modules.contains(.storage))
+        XCTAssertTrue(config.modules.contains(.analytics))
+        XCTAssertFalse(config.modules.contains(.auth))
+        XCTAssertFalse(config.modules.contains(.realtimeDatabase))
     }
 
     func testEnvironmentSetting() {
