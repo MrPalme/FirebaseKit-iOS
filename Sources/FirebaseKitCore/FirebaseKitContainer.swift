@@ -47,6 +47,9 @@ public final class FirebaseKitContainer: @unchecked Sendable {
     private var _remoteConfigService: (any FirebaseKitRemoteConfigServing)?
     private var _messagingService: (any FirebaseKitMessagingServing)?
     private var _firestoreService: (any FirebaseKitFirestoreServing)?
+    private var _storageService: (any FirebaseKitStorageServing)?
+    private var _realtimeDatabaseService: (any FirebaseKitRealtimeDatabaseServing)?
+    private var _analyticsService: (any FirebaseKitAnalyticsServing)?
 
     // MARK: - Service Access
 
@@ -76,6 +79,27 @@ public final class FirebaseKitContainer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _firestoreService
+    }
+
+    /// The registered storage service.
+    public var storageService: (any FirebaseKitStorageServing)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _storageService
+    }
+
+    /// The registered realtime database service.
+    public var realtimeDatabaseService: (any FirebaseKitRealtimeDatabaseServing)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _realtimeDatabaseService
+    }
+
+    /// The registered analytics service.
+    public var analyticsService: (any FirebaseKitAnalyticsServing)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _analyticsService
     }
 
     // MARK: - Registration
@@ -115,6 +139,27 @@ public final class FirebaseKitContainer: @unchecked Sendable {
         _firestoreService = service
     }
 
+    /// Registers the storage service implementation.
+    public func registerStorage(_ service: any FirebaseKitStorageServing) {
+        lock.lock()
+        defer { lock.unlock() }
+        _storageService = service
+    }
+
+    /// Registers the realtime database service implementation.
+    public func registerRealtimeDatabase(_ service: any FirebaseKitRealtimeDatabaseServing) {
+        lock.lock()
+        defer { lock.unlock() }
+        _realtimeDatabaseService = service
+    }
+
+    /// Registers the analytics service implementation.
+    public func registerAnalytics(_ service: any FirebaseKitAnalyticsServing) {
+        lock.lock()
+        defer { lock.unlock() }
+        _analyticsService = service
+    }
+
     /// Resets the container. Primarily useful for testing.
     public func reset() {
         lock.lock()
@@ -124,6 +169,9 @@ public final class FirebaseKitContainer: @unchecked Sendable {
         _remoteConfigService = nil
         _messagingService = nil
         _firestoreService = nil
+        _storageService = nil
+        _realtimeDatabaseService = nil
+        _analyticsService = nil
     }
 
     // MARK: - Init

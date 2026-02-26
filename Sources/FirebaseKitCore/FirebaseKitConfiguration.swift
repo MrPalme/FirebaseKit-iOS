@@ -38,9 +38,15 @@ public struct FirebaseKitConfiguration: Sendable {
         public static let remoteConfig = Modules(rawValue: 1 << 1)
         public static let messaging = Modules(rawValue: 1 << 2)
         public static let firestore = Modules(rawValue: 1 << 3)
+        public static let storage = Modules(rawValue: 1 << 4)
+        public static let realtimeDatabase = Modules(rawValue: 1 << 5)
+        public static let analytics = Modules(rawValue: 1 << 6)
 
         /// All currently implemented modules.
-        public static let all: Modules = [.auth, .remoteConfig, .messaging, .firestore]
+        public static let all: Modules = [
+            .auth, .remoteConfig, .messaging, .firestore,
+            .storage, .realtimeDatabase, .analytics,
+        ]
     }
 
     /// The runtime environment (debug / staging / production).

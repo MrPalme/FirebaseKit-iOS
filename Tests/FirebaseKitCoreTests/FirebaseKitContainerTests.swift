@@ -22,6 +22,9 @@ final class FirebaseKitContainerTests: XCTestCase {
         XCTAssertNil(FirebaseKitContainer.shared.remoteConfigService)
         XCTAssertNil(FirebaseKitContainer.shared.messagingService)
         XCTAssertNil(FirebaseKitContainer.shared.firestoreService)
+        XCTAssertNil(FirebaseKitContainer.shared.storageService)
+        XCTAssertNil(FirebaseKitContainer.shared.realtimeDatabaseService)
+        XCTAssertNil(FirebaseKitContainer.shared.analyticsService)
     }
 
     func testSetConfiguration() {

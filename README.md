@@ -10,8 +10,9 @@ FirebaseKit handles initialization, typed access, consistent error mapping, and 
 - **FirebaseKitRemoteConfig** — Remote Config wrapper with typed keys (`RemoteConfigKey<T>`) and automatic decoding for Bool, Int, Double, String, URL, and Decodable JSON.
 - **FirebaseKitMessaging** — FCM wrapper with token handling, APNs bridging hooks, and topic subscription.
 - **FirebaseKitFirestore** — Firestore CRUD wrappers with model mapping fully delegated to the host app via encode/decode closures.
-- **FirebaseKitStorage** — Placeholder (scaffolded, not yet implemented).
-- **FirebaseKitAnalytics** — Placeholder (scaffolded, not yet implemented).
+- **FirebaseKitStorage** — Upload, download, delete, and metadata for Firebase Storage. Typed `StoragePath` for compile-time safe references. Progress tracking via `AsyncStream`.
+- **FirebaseKitRealtimeDatabase** — Read, write, observe for Firebase Realtime Database. Typed `RealtimeDBPath<T>` for compile-time safe paths. Continuous observation via `AsyncStream`.
+- **FirebaseKitAnalytics** — Event logging and screen tracking for Firebase Analytics. Host-app-defined events and screens via `AnalyticsEvent` / `AnalyticsScreen` protocols. SwiftUI modifiers (`.trackScreen`, `.trackTap`) and UIKit extensions included.
 
 ## Requirements
 
@@ -39,6 +40,9 @@ Then add the modules you need as dependencies:
         "FirebaseKitRemoteConfig",
         "FirebaseKitMessaging",
         "FirebaseKitFirestore",
+        "FirebaseKitStorage",
+        "FirebaseKitRealtimeDatabase",
+        "FirebaseKitAnalytics",
     ]
 )
 ```
@@ -58,6 +62,9 @@ import FirebaseKitAuth
 import FirebaseKitRemoteConfig
 import FirebaseKitMessaging
 import FirebaseKitFirestore
+import FirebaseKitStorage
+import FirebaseKitRealtimeDatabase
+import FirebaseKitAnalytics
 
 @main
 struct MyApp: App {
@@ -84,6 +91,9 @@ struct MyApp: App {
         ])
         FirebaseKitMessagingService.register()
         FirebaseKitFirestoreService.register()
+        FirebaseKitStorageService.register()
+        FirebaseKitRealtimeDatabaseService.register()
+        FirebaseKitAnalyticsService.register()
     }
 
     var body: some Scene {
@@ -100,13 +110,14 @@ Only import and register the modules you need:
 try FirebaseKit.configure(
     FirebaseKitConfiguration(
         environment: .production,
-        modules: [.auth, .remoteConfig]  // Only auth + remote config
+        modules: [.auth, .remoteConfig, .analytics]  // Only these three
     )
 )
 
 FirebaseKitAuthService.register()
 FirebaseKitRemoteConfigService.register()
-// Messaging and Firestore are not registered — accessing them will fatalError with a clear message.
+FirebaseKitAnalyticsService.register()
+// Other modules are not registered — accessing them will fatalError with a clear message.
 ```
 
 ## Usage Examples
@@ -272,6 +283,207 @@ let recentNotes = try await FirebaseKit.firestore.query(
 )
 ```
 
+### Storage: Upload and Download
+
+```swift
+// Define typed storage paths
+extension StoragePath {
+    static func userAvatar(uid: String) -> StoragePath {
+        StoragePath("users/\(uid)/avatar.jpg")
+    }
+}
+
+// Upload data
+let imageData = /* your image data */
+let metadata = try await FirebaseKit.storage.upload(
+    data: imageData,
+    to: .userAvatar(uid: uid),
+    contentType: "image/jpeg"
+)
+
+// Upload from file URL
+try await FirebaseKit.storage.upload(
+    fileURL: localFileURL,
+    to: StoragePath("documents/\(docId)/attachment.pdf"),
+    contentType: "application/pdf"
+)
+
+// Get download URL
+let url = try await FirebaseKit.storage.downloadURL(for: .userAvatar(uid: uid))
+
+// Download data
+let data = try await FirebaseKit.storage.download(from: .userAvatar(uid: uid))
+
+// Delete
+try await FirebaseKit.storage.delete(at: .userAvatar(uid: uid))
+```
+
+### Storage: Upload with Progress
+
+```swift
+for await progress in FirebaseKit.storage.uploadWithProgress(data: largeData, to: path) {
+    print("Upload: \(Int(progress.fractionCompleted * 100))%")
+}
+```
+
+### Realtime Database: Read and Write
+
+```swift
+// Define typed paths
+extension RealtimeDBPath where T == String {
+    static func userStatus(uid: String) -> RealtimeDBPath<String> {
+        RealtimeDBPath("users/\(uid)/status")
+    }
+}
+
+// Write a value
+try await FirebaseKit.realtimeDatabase.set(
+    path: "users/\(uid)/status",
+    value: "online"
+)
+
+// Update specific children
+try await FirebaseKit.realtimeDatabase.update(
+    path: "users/\(uid)",
+    values: ["status": "online", "lastSeen": Date().timeIntervalSince1970]
+)
+
+// Read a typed value
+let status = try await FirebaseKit.realtimeDatabase.get(
+    path: .userStatus(uid: uid)
+)
+
+// Read a complex Decodable type
+struct UserProfile: Decodable {
+    let name: String
+    let age: Int
+}
+
+let profile = try await FirebaseKit.realtimeDatabase.get(
+    path: RealtimeDBPath<UserProfile>("users/\(uid)/profile")
+)
+
+// Remove data
+try await FirebaseKit.realtimeDatabase.remove(path: "users/\(uid)/temp")
+```
+
+### Realtime Database: Observe Changes
+
+```swift
+let statusPath = RealtimeDBPath<String>("users/\(uid)/status")
+
+Task {
+    for await status in FirebaseKit.realtimeDatabase.observe(path: statusPath) {
+        print("Status changed: \(status ?? "nil")")
+    }
+}
+```
+
+### Analytics: Define Host-App Events and Screens
+
+```swift
+import FirebaseKitCore
+
+// Define your screens (host-app owned)
+enum AppScreen: String, AnalyticsScreen {
+    case home, settings, profile, onboarding
+
+    var screenName: String { rawValue }
+}
+
+// Define your events (host-app owned)
+enum AppEvent: AnalyticsEvent {
+    case buttonTapped(name: String, screen: String)
+    case purchaseCompleted(productId: String, price: Double)
+    case searchPerformed(query: String, resultCount: Int)
+
+    var name: String {
+        switch self {
+        case .buttonTapped: return "button_tapped"
+        case .purchaseCompleted: return "purchase_completed"
+        case .searchPerformed: return "search_performed"
+        }
+    }
+
+    var parameters: [String: AnalyticsValue] {
+        switch self {
+        case .buttonTapped(let name, let screen):
+            return ["button_name": .string(name), "screen": .string(screen)]
+        case .purchaseCompleted(let productId, let price):
+            return ["product_id": .string(productId), "price": .double(price)]
+        case .searchPerformed(let query, let resultCount):
+            return ["query": .string(query), "result_count": .int(resultCount)]
+        }
+    }
+}
+```
+
+### Analytics: Direct Logging
+
+```swift
+// Log an event
+FirebaseKit.analytics.log(event: AppEvent.buttonTapped(name: "upgrade", screen: "settings"))
+
+// Log a screen view
+FirebaseKit.analytics.screen(AppScreen.home)
+
+// Set user properties (never PII!)
+FirebaseKit.analytics.setUserProperty("subscription_tier", value: "premium")
+
+// Set user ID (use opaque IDs only, never emails!)
+FirebaseKit.analytics.setUserId("user_abc123")
+```
+
+### Analytics: SwiftUI Modifiers
+
+```swift
+import FirebaseKitAnalytics
+
+struct HomeView: View {
+    var body: some View {
+        VStack {
+            Text("Welcome!")
+
+            Button("Upgrade") {
+                // your action
+            }
+            // Logs AppEvent when tapped (does not interfere with button action)
+            .trackTap(AppEvent.buttonTapped(name: "upgrade", screen: "home"))
+
+            Button("Settings") {
+                // navigate
+            }
+            .trackTap(AppEvent.buttonTapped(name: "settings", screen: "home"))
+        }
+        // Logs screen_view when this view appears
+        .trackScreen(AppScreen.home)
+        // Sets screen context in SwiftUI environment
+        .analyticsContext(screen: AppScreen.home)
+    }
+}
+```
+
+> **Note on `onAppear` double-fires:** SwiftUI's `onAppear` may fire more than once during navigation transitions. The `.trackScreen` modifier deduplicates by default (only the first `onAppear` fires the event). Pass `deduplicate: false` to log every appearance.
+
+### Analytics: UIKit Usage
+
+```swift
+import FirebaseKitAnalytics
+
+class ProfileViewController: UIViewController {
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        trackScreen(AppScreen.profile) // UIViewController extension
+    }
+
+    func setupButtons() {
+        upgradeButton.trackTap(
+            AppEvent.buttonTapped(name: "upgrade", screen: "profile")
+        )
+    }
+}
+```
+
 ## Customization
 
 ### Custom String Provider
@@ -340,6 +552,41 @@ do {
 
 Each error case carries an `underlying: Error` with the original Firebase SDK error for debugging.
 
+### Storage Errors
+
+| Case | When |
+|------|------|
+| `storageUploadFailed(path:underlying:)` | Upload operation failed |
+| `storageDownloadFailed(path:underlying:)` | Download operation failed |
+| `storageDeleteFailed(path:underlying:)` | Delete operation failed |
+| `storageObjectNotFound(path:)` | Object does not exist |
+| `storagePermissionDenied(path:underlying:)` | Security rules denied access |
+| `storageCancelled(path:)` | Operation was cancelled |
+| `storageOperationFailed(underlying:)` | Generic storage failure |
+
+### Realtime Database Errors
+
+| Case | When |
+|------|------|
+| `realtimeDBReadFailed(path:underlying:)` | Read/get operation failed |
+| `realtimeDBWriteFailed(path:underlying:)` | Set/update/remove failed |
+| `realtimeDBDecodingFailed(path:underlying:)` | Value could not be decoded to expected type |
+| `realtimeDBOperationFailed(underlying:)` | Generic database failure |
+
+### Analytics Errors
+
+| Case | When |
+|------|------|
+| `analyticsFailure(underlying:)` | Analytics operation failed |
+
+## Privacy Note
+
+**Never log PII (Personally Identifiable Information) through analytics:**
+- Do not pass email addresses, phone numbers, or full names as event parameters.
+- Use opaque, stable identifiers for `setUserId(_:)` (e.g. Firebase Auth UID).
+- Review `AnalyticsEvent` parameters before shipping to ensure no PII leaks.
+- Firebase Analytics automatically collects device-level data. Review [Firebase data collection](https://firebase.google.com/docs/analytics/configure-data-collection) for details.
+
 ## Architecture
 
 ```
@@ -349,12 +596,18 @@ Host App
   │     ├── FirebaseKitAuthServing (protocol)
   │     ├── FirebaseKitRemoteConfigServing (protocol)
   │     ├── FirebaseKitMessagingServing (protocol)
-  │     └── FirebaseKitFirestoreServing (protocol)
+  │     ├── FirebaseKitFirestoreServing (protocol)
+  │     ├── FirebaseKitStorageServing (protocol)
+  │     ├── FirebaseKitRealtimeDatabaseServing (protocol)
+  │     └── FirebaseKitAnalyticsServing (protocol)
   │
   ├── FirebaseKitAuth (concrete Firebase Auth implementation)
   ├── FirebaseKitRemoteConfig (concrete Remote Config implementation)
   ├── FirebaseKitMessaging (concrete FCM implementation)
-  └── FirebaseKitFirestore (concrete Firestore implementation)
+  ├── FirebaseKitFirestore (concrete Firestore implementation)
+  ├── FirebaseKitStorage (concrete Storage implementation)
+  ├── FirebaseKitRealtimeDatabase (concrete Realtime Database implementation)
+  └── FirebaseKitAnalytics (concrete Analytics implementation + SwiftUI modifiers + UIKit extensions)
 ```
 
 - Protocols live in `FirebaseKitCore` (no Firebase SDK dependency).
@@ -366,8 +619,9 @@ Host App
 ## Threading
 
 - UI-facing state updates (`AuthSessionObserver`, etc.) are `@MainActor`.
-- Service calls (`signIn`, `fetchAndActivate`, `getDocument`, etc.) are `async` and can run off-main.
+- Service calls (`signIn`, `fetchAndActivate`, `getDocument`, `upload`, `get`, etc.) are `async` and can run off-main.
 - All service classes are `Sendable`-safe with internal locking.
+- `AsyncStream` observers (Realtime Database, Remote Config, Auth) clean up handles on task cancellation.
 
 ## Project Structure
 
@@ -378,9 +632,9 @@ FirebaseKit-iOS/
 ├── README.md
 ├── Sources/
 │   ├── FirebaseKitCore/
-│   │   ├── FirebaseKit.swift                  (facade)
+│   │   ├── FirebaseKit.swift                        (facade)
 │   │   ├── FirebaseKitConfiguration.swift
-│   │   ├── FirebaseKitContainer.swift         (DI container)
+│   │   ├── FirebaseKitContainer.swift               (DI container)
 │   │   ├── FirebaseKitEnvironment.swift
 │   │   ├── FirebaseKitError.swift
 │   │   ├── FirebaseKitLogging.swift
@@ -390,7 +644,10 @@ FirebaseKit-iOS/
 │   │       ├── FirebaseKitAuthServing.swift
 │   │       ├── FirebaseKitRemoteConfigServing.swift
 │   │       ├── FirebaseKitMessagingServing.swift
-│   │       └── FirebaseKitFirestoreServing.swift
+│   │       ├── FirebaseKitFirestoreServing.swift
+│   │       ├── FirebaseKitStorageServing.swift
+│   │       ├── FirebaseKitRealtimeDatabaseServing.swift
+│   │       └── FirebaseKitAnalyticsServing.swift
 │   ├── FirebaseKitAuth/
 │   │   ├── FirebaseKitAuthService.swift
 │   │   ├── AuthErrorMapper.swift
@@ -405,9 +662,15 @@ FirebaseKit-iOS/
 │   │   ├── FirebaseKitFirestoreService.swift
 │   │   └── FirebaseKitQuery+Firestore.swift
 │   ├── FirebaseKitStorage/
-│   │   └── FirebaseKitStorage.swift           (placeholder)
+│   │   ├── FirebaseKitStorageService.swift
+│   │   └── StorageErrorMapper.swift
+│   ├── FirebaseKitRealtimeDatabase/
+│   │   ├── FirebaseKitRealtimeDatabaseService.swift
+│   │   └── RealtimeDBDecoder.swift
 │   └── FirebaseKitAnalytics/
-│       └── FirebaseKitAnalytics.swift         (placeholder)
+│       ├── FirebaseKitAnalyticsService.swift
+│       ├── AnalyticsSwiftUIModifiers.swift
+│       └── AnalyticsUIKitExtensions.swift
 ├── Tests/
 │   ├── FirebaseKitCoreTests/
 │   │   ├── FirebaseKitErrorTests.swift
@@ -420,8 +683,14 @@ FirebaseKit-iOS/
 │   │   └── RemoteConfigKeyTests.swift
 │   ├── FirebaseKitMessagingTests/
 │   │   └── FirebaseKitMessagingTests.swift
-│   └── FirebaseKitFirestoreTests/
-│       └── FirebaseKitFirestoreTests.swift
+│   ├── FirebaseKitFirestoreTests/
+│   │   └── FirebaseKitFirestoreTests.swift
+│   ├── FirebaseKitStorageTests/
+│   │   └── StoragePathTests.swift
+│   ├── FirebaseKitRealtimeDatabaseTests/
+│   │   └── RealtimeDBPathTests.swift
+│   └── FirebaseKitAnalyticsTests/
+│       └── AnalyticsValueTests.swift
 └── Examples/
     └── SwiftUIExample/
         └── ExampleApp.swift
@@ -429,13 +698,16 @@ FirebaseKit-iOS/
 
 ## Testing
 
-Core tests (error mapping, configuration, string provider, container) run without a Firebase backend:
+Core tests (error mapping, configuration, string provider, container, value conversions) run without a Firebase backend:
 
 ```bash
 swift test --filter FirebaseKitCoreTests
+swift test --filter FirebaseKitStorageTests
+swift test --filter FirebaseKitRealtimeDatabaseTests
+swift test --filter FirebaseKitAnalyticsTests
 ```
 
-Auth, RemoteConfig, Messaging, and Firestore tests are scaffolded for integration testing with Firebase emulators. See the test files for setup instructions.
+Auth, RemoteConfig, Messaging, Firestore, Storage, RealtimeDatabase, and Analytics integration tests are scaffolded for testing with Firebase emulators. See the test files for setup instructions.
 
 ## License
 

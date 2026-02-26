@@ -25,10 +25,13 @@ let package = Package(
         // Firestore module — CRUD wrappers with host-app model mapping.
         .library(name: "FirebaseKitFirestore", targets: ["FirebaseKitFirestore"]),
 
-        // Placeholder: Storage module.
+        // Storage module — Upload, download, delete, metadata.
         .library(name: "FirebaseKitStorage", targets: ["FirebaseKitStorage"]),
 
-        // Placeholder: Analytics module.
+        // Realtime Database module — Read, write, observe.
+        .library(name: "FirebaseKitRealtimeDatabase", targets: ["FirebaseKitRealtimeDatabase"]),
+
+        // Analytics module — Event logging, screen tracking, SwiftUI modifiers.
         .library(name: "FirebaseKitAnalytics", targets: ["FirebaseKitAnalytics"]),
     ],
     dependencies: [
@@ -87,7 +90,7 @@ let package = Package(
             path: "Sources/FirebaseKitFirestore"
         ),
 
-        // MARK: - Placeholders
+        // MARK: - Storage
 
         .target(
             name: "FirebaseKitStorage",
@@ -97,6 +100,19 @@ let package = Package(
             ],
             path: "Sources/FirebaseKitStorage"
         ),
+
+        // MARK: - Realtime Database
+
+        .target(
+            name: "FirebaseKitRealtimeDatabase",
+            dependencies: [
+                "FirebaseKitCore",
+                .product(name: "FirebaseDatabase", package: "firebase-ios-sdk"),
+            ],
+            path: "Sources/FirebaseKitRealtimeDatabase"
+        ),
+
+        // MARK: - Analytics
 
         .target(
             name: "FirebaseKitAnalytics",
@@ -137,6 +153,24 @@ let package = Package(
             name: "FirebaseKitFirestoreTests",
             dependencies: ["FirebaseKitFirestore", "FirebaseKitCore"],
             path: "Tests/FirebaseKitFirestoreTests"
+        ),
+
+        .testTarget(
+            name: "FirebaseKitStorageTests",
+            dependencies: ["FirebaseKitStorage", "FirebaseKitCore"],
+            path: "Tests/FirebaseKitStorageTests"
+        ),
+
+        .testTarget(
+            name: "FirebaseKitRealtimeDatabaseTests",
+            dependencies: ["FirebaseKitRealtimeDatabase", "FirebaseKitCore"],
+            path: "Tests/FirebaseKitRealtimeDatabaseTests"
+        ),
+
+        .testTarget(
+            name: "FirebaseKitAnalyticsTests",
+            dependencies: ["FirebaseKitAnalytics", "FirebaseKitCore"],
+            path: "Tests/FirebaseKitAnalyticsTests"
         ),
     ]
 )

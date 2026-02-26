@@ -12,6 +12,9 @@ import FirebaseKitAuth
 import FirebaseKitRemoteConfig
 import FirebaseKitMessaging
 import FirebaseKitFirestore
+import FirebaseKitStorage
+import FirebaseKitRealtimeDatabase
+import FirebaseKitAnalytics
 
 // MARK: - App Entry Point
 
@@ -47,6 +50,9 @@ struct ExampleApp: App {
         ])
         FirebaseKitMessagingService.register()
         FirebaseKitFirestoreService.register()
+        FirebaseKitStorageService.register()
+        FirebaseKitRealtimeDatabaseService.register()
+        FirebaseKitAnalyticsService.register()
     }
 
     var body: some Scene {
@@ -87,6 +93,51 @@ struct AppStringsProvider: FirebaseKitStringProviding {
             return "Oops! Wrong email or password. Please try again."
         default:
             return FirebaseKitDefaultStrings().string(key)
+        }
+    }
+}
+
+// MARK: - Host-App Analytics Definitions
+
+/// Host-app-defined screens. FirebaseKit just logs them.
+enum AppScreen: String, AnalyticsScreen {
+    case login
+    case home
+    case settings
+    case storage
+    case realtimeDB
+
+    var screenName: String { rawValue }
+}
+
+/// Host-app-defined events. FirebaseKit just processes them.
+enum AppEvent: AnalyticsEvent {
+    case buttonTapped(name: String, screen: String)
+    case fileUploaded(path: String, sizeBytes: Int)
+    case dbValueWritten(path: String)
+
+    var name: String {
+        switch self {
+        case .buttonTapped: return "button_tapped"
+        case .fileUploaded: return "file_uploaded"
+        case .dbValueWritten: return "db_value_written"
+        }
+    }
+
+    var parameters: [String: AnalyticsValue] {
+        switch self {
+        case .buttonTapped(let name, let screen):
+            return [
+                "button_name": .string(name),
+                "screen": .string(screen),
+            ]
+        case .fileUploaded(let path, let sizeBytes):
+            return [
+                "path": .string(path),
+                "size_bytes": .int(sizeBytes),
+            ]
+        case .dbValueWritten(let path):
+            return ["path": .string(path)]
         }
     }
 }
@@ -134,8 +185,12 @@ struct LoginView: View {
                 Task { await viewModel.signIn() }
             }
             .disabled(viewModel.isLoading)
+            // Track taps on the sign-in button
+            .trackTap(AppEvent.buttonTapped(name: "sign_in", screen: "login"))
         }
         .padding()
+        // Track screen views
+        .trackScreen(AppScreen.login)
     }
 }
 
@@ -160,7 +215,7 @@ final class LoginViewModel: ObservableObject {
     }
 }
 
-// MARK: - Home View (Remote Config + Firestore Example)
+// MARK: - Home View (Remote Config + Firestore + Storage + RealtimeDB + Analytics)
 
 struct HomeView: View {
     let user: FirebaseAuthUser
@@ -185,31 +240,85 @@ struct HomeView: View {
                         Text(note.title)
                     }
                 }
+
+                // Storage Example
+                Section("Storage") {
+                    Button("Upload Sample Image") {
+                        Task { await viewModel.uploadSampleImage(userUID: user.uid) }
+                    }
+                    .trackTap(AppEvent.buttonTapped(name: "upload_image", screen: "home"))
+
+                    if let downloadURL = viewModel.lastDownloadURL {
+                        Text("URL: \(downloadURL.absoluteString.prefix(50))…")
+                            .font(.caption)
+                    }
+
+                    Button("Download Sample Image") {
+                        Task { await viewModel.downloadSampleImage(userUID: user.uid) }
+                    }
+
+                    if let downloadedSize = viewModel.downloadedImageSize {
+                        Text("Downloaded: \(downloadedSize) bytes")
+                            .font(.caption)
+                    }
+                }
+
+                // Realtime Database Example
+                Section("Realtime Database") {
+                    Text("Status: \(viewModel.userStatus ?? "—")")
+
+                    Button("Set Online") {
+                        Task { await viewModel.setOnlineStatus(userUID: user.uid, online: true) }
+                    }
+
+                    Button("Set Offline") {
+                        Task { await viewModel.setOnlineStatus(userUID: user.uid, online: false) }
+                    }
+                }
+
+                // Direct Analytics Call Example
+                Section("Analytics") {
+                    Button("Log Custom Event") {
+                        FirebaseKit.analytics.log(
+                            event: AppEvent.buttonTapped(name: "custom_event", screen: "home")
+                        )
+                    }
+                }
             }
             .navigationTitle("Home")
             .toolbar {
                 Button("Sign Out") {
                     try? FirebaseKit.auth.signOut()
                 }
+                .trackTap(AppEvent.buttonTapped(name: "sign_out", screen: "home"))
             }
             .task {
                 await viewModel.load(userUID: user.uid)
             }
         }
+        // Track screen + set analytics context
+        .trackScreen(AppScreen.home)
+        .analyticsContext(screen: AppScreen.home)
     }
 }
 
-// MARK: - Home ViewModel (RemoteConfig + Firestore)
+// MARK: - Home ViewModel (RemoteConfig + Firestore + Storage + RealtimeDB)
 
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published var onboardingEnabled = false
     @Published var maxUploadSizeMB = 0
     @Published var notes: [Note] = []
+    @Published var lastDownloadURL: URL?
+    @Published var downloadedImageSize: Int?
+    @Published var userStatus: String?
 
     // Typed Remote Config keys
     private let onboardingKey = RemoteConfigKey<Bool>("onboarding_enabled", default: false)
     private let maxUploadKey = RemoteConfigKey<Int>("max_upload_size_mb", default: 10)
+
+    // Typed Realtime Database path
+    private var statusObserveTask: Task<Void, Never>?
 
     func load(userUID: String) async {
         // Fetch Remote Config
@@ -236,6 +345,70 @@ final class HomeViewModel: ObservableObject {
             )
         } catch {
             print("Firestore error: \(error)")
+        }
+
+        // Observe Realtime Database for status changes
+        let statusPath = RealtimeDBPath<String>("users/\(userUID)/status")
+        statusObserveTask?.cancel()
+        statusObserveTask = Task {
+            for await status in FirebaseKit.realtimeDatabase.observe(path: statusPath) {
+                guard !Task.isCancelled else { break }
+                self.userStatus = status ?? "unknown"
+            }
+        }
+    }
+
+    // MARK: - Storage Examples
+
+    func uploadSampleImage(userUID: String) async {
+        let sampleData = Data("Hello, Storage!".utf8)
+        let path = StoragePath("users/\(userUID)/sample.txt")
+
+        do {
+            let metadata = try await FirebaseKit.storage.upload(
+                data: sampleData,
+                to: path,
+                contentType: "text/plain"
+            )
+            print("Uploaded: \(metadata.size) bytes")
+
+            // Get the download URL
+            let url = try await FirebaseKit.storage.downloadURL(for: path)
+            lastDownloadURL = url
+
+            // Log analytics event
+            FirebaseKit.analytics.log(
+                event: AppEvent.fileUploaded(path: path.path, sizeBytes: sampleData.count)
+            )
+        } catch {
+            print("Storage upload error: \(error)")
+        }
+    }
+
+    func downloadSampleImage(userUID: String) async {
+        let path = StoragePath("users/\(userUID)/sample.txt")
+
+        do {
+            let data = try await FirebaseKit.storage.download(from: path)
+            downloadedImageSize = data.count
+        } catch {
+            print("Storage download error: \(error)")
+        }
+    }
+
+    // MARK: - Realtime Database Examples
+
+    func setOnlineStatus(userUID: String, online: Bool) async {
+        do {
+            try await FirebaseKit.realtimeDatabase.set(
+                path: "users/\(userUID)/status",
+                value: online ? "online" : "offline"
+            )
+            FirebaseKit.analytics.log(
+                event: AppEvent.dbValueWritten(path: "users/\(userUID)/status")
+            )
+        } catch {
+            print("RealtimeDB error: \(error)")
         }
     }
 }
@@ -274,5 +447,33 @@ func observeFCMToken() async {
             print("New FCM token: \(token)")
             // Send to your backend
         }
+    }
+}
+
+// MARK: - Storage Upload with Progress Example
+
+/// Demonstrates uploading data with progress tracking.
+func uploadWithProgressExample(userUID: String) async {
+    let data = Data(repeating: 0, count: 1_000_000) // 1 MB
+    let path = StoragePath("users/\(userUID)/large_file.bin")
+
+    for await progress in FirebaseKit.storage.uploadWithProgress(data: data, to: path) {
+        print("Upload progress: \(Int(progress.fractionCompleted * 100))%")
+    }
+    print("Upload complete!")
+}
+
+// MARK: - Realtime Database Typed Path Example
+
+/// Demonstrates reading a typed value using RealtimeDBPath.
+func readUserProfileExample(userUID: String) async throws {
+    struct UserProfile: Decodable {
+        let name: String
+        let age: Int
+    }
+
+    let profilePath = RealtimeDBPath<UserProfile>("users/\(userUID)/profile")
+    if let profile = try await FirebaseKit.realtimeDatabase.get(path: profilePath) {
+        print("User: \(profile.name), Age: \(profile.age)")
     }
 }
